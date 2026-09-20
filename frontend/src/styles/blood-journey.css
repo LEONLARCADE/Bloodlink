@@ -1,0 +1,158 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   BloodLink — scroll-driven blood journey
+   Only the pieces that genuinely need real CSS live here: keyframes, the
+   fixed cinematic layer, GPU hints and the reduced-motion fallback.
+   Everything positional/visual that Tailwind can express stays in JSX.
+   ───────────────────────────────────────────────────────────────────── */
+
+:root {
+  --bl-blood: #b3161c;
+  --bl-blood-deep: #7f0f14;
+  --bl-blood-bright: #e11d28;
+  --bl-rail-w: 26vw;
+}
+
+/* ── fixed cinematic layer ────────────────────────────────────────────── */
+
+.bl-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+  contain: layout paint style;
+}
+
+/* The vertical lane the droplet travels down. */
+.bl-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 4vw;
+  width: min(var(--bl-rail-w), 420px);
+  min-width: 260px;
+}
+
+/* Every element the rAF loop writes to gets its own layer up front so the
+   compositor never has to promote mid-animation. */
+.bl-gpu {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+.bl-drop,
+.bl-rebound {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  margin-left: -11px;
+  transform-origin: 50% 0%;
+}
+
+.bl-pool {
+  position: absolute;
+  width: min(100%, 280px);
+  height: auto;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+}
+
+/* Page content always sits above the animation — readability first. */
+.bl-content {
+  position: relative;
+  z-index: 10;
+}
+
+/* ── loop wash ────────────────────────────────────────────────────────────
+   The seam between CONTACT and HOME. A blood-red wipe covers the swap so
+   the scroll reset is never visible as a jump. */
+
+.bl-wash {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(120% 80% at 50% 110%, var(--bl-blood-bright) 0%, var(--bl-blood) 45%, var(--bl-blood-deep) 100%);
+}
+
+.bl-wash--on {
+  animation: bl-wash-sweep 900ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes bl-wash-sweep {
+  0% { opacity: 0; transform: translateY(18%); }
+  32% { opacity: 1; transform: translateY(0); }
+  58% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-14%); }
+}
+
+/* ── legacy ripple class ──────────────────────────────────────────────────
+   components/common/BloodFlowAnimation.jsx has always referenced
+   `.bl-ripple` but the keyframes were never defined. Defining them here
+   repairs that component without modifying it. */
+
+.bl-ripple {
+  animation: bl-ripple-out 1800ms ease-out forwards;
+  transform-origin: center;
+}
+
+@keyframes bl-ripple-out {
+  0% { transform: scale(0.15); opacity: 0.75; stroke-width: 3; }
+  100% { transform: scale(1.15); opacity: 0; stroke-width: 1; }
+}
+
+/* ── idle pulse for the resting bead (cheap, compositor-only) ─────────── */
+
+@keyframes bl-bead-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.bl-bead-idle {
+  animation: bl-bead-pulse 3.2s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* ── responsive ───────────────────────────────────────────────────────── */
+
+@media (max-width: 1023px) {
+  .bl-rail {
+    right: 2vw;
+    width: 30vw;
+    min-width: 200px;
+    opacity: 0.9;
+  }
+}
+
+/* Phones: the rail narrows to a compact drip lane pinned to the right edge.
+   JourneySection reserves exactly this width with `pr-20`, so the animation
+   never lands on top of a word. */
+@media (max-width: 639px) {
+  .bl-rail {
+    right: 0;
+    width: 76px;
+    min-width: 76px;
+  }
+}
+
+/* ── reduced motion ───────────────────────────────────────────────────────
+   The layer stays (it's part of the brand) but nothing moves: the hook
+   never starts its rAF loop and these kill any residual animation. */
+
+@media (prefers-reduced-motion: reduce) {
+  .bl-wash--on,
+  .bl-ripple,
+  .bl-bead-idle {
+    animation: none !important;
+  }
+
+  .bl-layer {
+    opacity: 0.6;
+  }
+}

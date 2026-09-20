@@ -1,30 +1,24 @@
-const express = require("express");
-const cors = require("cors");
-const dotenv = require("dotenv");
-const helmet = require("helmet");
+const { PORT, NODE_ENV } = require("./config/env");
+const app = require("./app");
 
-dotenv.config();
-
-const app = express();
-
-const PORT = process.env.PORT || 5000;
-
-app.use(helmet());
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-  })
-);
-
-app.use(express.json());
-
-app.get("/api/health", (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "BloodLink backend is running",
-  });
+// app.listen returns the HTTP server, which Socket.IO can attach to later
+const server = app.listen(PORT, () => {
+  console.log(`BloodLink backend running on port ${PORT} (${NODE_ENV})`);
 });
 
-app.listen(PORT, () => {
-  console.log(`BloodLink backend running on http://localhost:${PORT}`);
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`Port ${PORT} is already in use. Stop the other server first.`);
+  } else {
+    console.error(err);
+  }
+  process.exit(1);
 });
+
+// Hosting platforms send SIGTERM when restarting the app
+const shutdown = (signal) => {
+  console.log(`${signal} received, shutting down...`);
+  server.close(() => process.exit(0));
+};
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

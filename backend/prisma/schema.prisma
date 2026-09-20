@@ -1,0 +1,203 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------
+
+enum UserRole {
+  DONOR
+  RECIPIENT
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum BloodGroup {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
+}
+
+enum UrgencyLevel {
+  NORMAL
+  URGENT
+  CRITICAL
+}
+
+enum RequestStatus {
+  OPEN
+  IN_PROGRESS
+  FULFILLED
+  CANCELLED
+  EXPIRED
+}
+
+enum ResponseStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  COMPLETED
+}
+
+enum NotificationType {
+  REQUEST_UPDATE
+  DONOR_RESPONSE
+  NEW_MESSAGE
+  SYSTEM
+}
+
+// ---------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  // Will hold a bcrypt HASH only (created in Phase 5). Never a plain-text password.
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         UserRole
+  status       AccountStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  donorProfile     DonorProfile?
+  recipientProfile RecipientProfile?
+  notifications    Notification[]
+  sentMessages     Message[]         @relation("MessageSender")
+  receivedMessages Message[]         @relation("MessageReceiver")
+
+  @@index([role])
+  @@map("users")
+}
+
+model DonorProfile {
+  id               String     @id @default(uuid())
+  userId           String     @unique
+  bloodGroup       BloodGroup
+  district         String
+  state            String?
+  // The donor's own setting. It is NOT a medical eligibility decision.
+  isAvailable      Boolean    @default(true)
+  lastDonationDate DateTime?  @db.Date
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  responses RequestResponse[]
+
+  @@index([bloodGroup, district, isAvailable])
+  @@index([district])
+  @@map("donor_profiles")
+}
+
+model RecipientProfile {
+  id         String      @id @default(uuid())
+  userId     String      @unique
+  bloodGroup BloodGroup?
+  district   String
+  state      String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requests BloodRequest[]
+
+  @@map("recipient_profiles")
+}
+
+model BloodRequest {
+  id            String        @id @default(uuid())
+  recipientId   String
+  bloodGroup    BloodGroup
+  unitsRequired Int           @default(1)
+  district      String
+  hospitalName  String?
+  patientName   String?
+  urgency       UrgencyLevel  @default(NORMAL)
+  status        RequestStatus @default(OPEN)
+  neededBy      DateTime?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  recipient     RecipientProfile  @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  responses     RequestResponse[]
+  notifications Notification[]
+  messages      Message[]
+
+  @@index([status, bloodGroup, district])
+  @@index([recipientId])
+  @@map("blood_requests")
+}
+
+// A donor's answer to a blood request. Also serves as the donor's history.
+model RequestResponse {
+  id          String         @id @default(uuid())
+  requestId   String
+  donorId     String
+  status      ResponseStatus @default(PENDING)
+  note        String?
+  completedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  request BloodRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  donor   DonorProfile @relation(fields: [donorId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, donorId])
+  @@index([donorId, status])
+  @@map("request_responses")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  requestId String?
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  request BloodRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  requestId  String?
+  content    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  sender   User          @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User          @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  request  BloodRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  @@index([receiverId, isRead])
+  @@index([senderId, receiverId, createdAt])
+  @@map("messages")
+}
